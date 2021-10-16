@@ -14,7 +14,7 @@ test_scene = "mesh_semantic.ply"
 sim_settings = {
     "scene": test_scene,  # Scene path
     "default_agent": 0,  # Index of the default agent
-    "sensor_height": 1.5,  # Height of sensors in meters, relative to the agent
+    "sensor_height": 0,  # Height of sensors in meters, relative to the agent
     "width": 512,  # Spatial resolution of the observations
     "height": 512,
     "sensor_pitch": 0,  # sensor pitch (x rotation in rads)
@@ -24,12 +24,11 @@ sim_settings = {
 # It contains two parts:
 # one for the simulator backend
 # one for the agent, where you can attach a bunch of sensors
-
 def transform_rgb_bgr(image):
     return image[:, :, [2, 1, 0]]
 
 def transform_depth(image):
-    depth_img = (image / 10 * 255).astype(np.uint8)
+    depth_img = (image / 10 * 65535).astype(np.uint16)
     return depth_img
 
 def transform_semantic(semantic_obs):
@@ -97,11 +96,13 @@ sim = habitat_sim.Simulator(cfg)
 
 
 # initialize an agent
+FLOOR = 0 # 0 : first, 1 : second
+fname_key = {0:'first_floor', 1:'second_floor'}
 agent = sim.initialize_agent(sim_settings["default_agent"])
 
 # Set agent state
 agent_state = habitat_sim.AgentState()
-agent_state.position = np.array([0.0, 1.0, 0.0])  # agent in world space, [0, 0, 0] : first floor, [0, 1, 0] : second floor
+agent_state.position = np.array([0.0, FLOOR, 0.0])  # agent in world space, [0, 0, 0] : first floor, [0, 1, 0] : second floor
 agent.set_state(agent_state)
 
 # obtain the default, discrete actions that an agent can perform
@@ -113,8 +114,6 @@ print("Discrete action space: ", action_names)
 FORWARD_KEY="w"
 LEFT_KEY="a"
 RIGHT_KEY="d"
-UP="u"
-DOWN="i"
 FINISH="f"
 
 print("#############################")
@@ -126,7 +125,7 @@ print(" f for finish and quit the program")
 print("#############################")
 
 
-def navigateAndSee(action_cnt, action=""):
+def navigateAndSee(action=""):
     if action in action_names:
         observations = sim.step(action)
         agent_state = agent.get_state()
@@ -135,38 +134,50 @@ def navigateAndSee(action_cnt, action=""):
         cv2.imshow("RGB", transform_rgb_bgr(observations["color_sensor"]))
         cv2.imshow("depth", transform_depth(observations["depth_sensor"]))
         cv2.imshow("semantic", transform_semantic(observations["semantic_sensor"]))
+        print(observations["depth_sensor"])
         
         print("camera pose: x y z rw rx ry rz")
         print(sensor_state.position[0],sensor_state.position[1],sensor_state.position[2],  sensor_state.rotation.w, sensor_state.rotation.x, sensor_state.rotation.y, sensor_state.rotation.z)
 
-        # write to folder "Data_collection"
-        root = './Data_collection/2'
-        rgb_dir = '{}/rgb/{}.png'.format(root, action_cnt)
-        depth_dir = '{}/depth/{}.png'.format(root, action_cnt)
-        cv2.imwrite(rgb_dir, transform_rgb_bgr(observations["color_sensor"]))
-        cv2.imwrite(depth_dir, transform_depth(observations["depth_sensor"]))
-        gt_pose.write('{} {} {} {} {} {} {}\n'.format(sensor_state.position[0],sensor_state.position[1],sensor_state.position[2],  sensor_state.rotation.w, sensor_state.rotation.x, sensor_state.rotation.y, sensor_state.rotation.z))
-        
+        return observations["color_sensor"], observations["depth_sensor"], sensor_state
+    return None, None, None
 
-action_cnt = 1
-gt_pose = open('Data_collection/2/GT_Pose.txt', 'w') # for position/pose record
+def writeState(rgb, depth, sensor_state, write_cnt):
+    # write to folder "Data_collection"
+    root = './Data_collection/{}'.format(fname_key[FLOOR])
+    rgb_dir = '{}/rgb/{}.png'.format(root, write_cnt)
+    depth_dir = '{}/depth/{}.png'.format(root, write_cnt)
+    cv2.imwrite(rgb_dir, transform_rgb_bgr(rgb))
+    cv2.imwrite(depth_dir, transform_depth(depth))
+    gt_pose.write('{} {} {} {} {} {} {}\n'.format(sensor_state.position[0],sensor_state.position[1],sensor_state.position[2],  sensor_state.rotation.w, sensor_state.rotation.x, sensor_state.rotation.y, sensor_state.rotation.z))
+        
+write_cnt = 1
+write_signal = 1
+
+gt_pose = open('Data_collection/{}/GT_Pose.txt'.format(fname_key[FLOOR]), 'w') # for position/pose record
 action = "move_forward"
-navigateAndSee(action_cnt, action)
+rgb, depth, sensor_state = navigateAndSee(action)
 
 while True:
+    # if write_signal == 1:
+    writeState(rgb, depth, sensor_state, write_cnt)
+    write_cnt += 1
+    # elif write_signal == 2:
+    #     write_signal = 0
+    # write_signal += 1
+
     keystroke = cv2.waitKey(0)
-    action_cnt += 1
     if keystroke == ord(FORWARD_KEY):
         action = "move_forward"
-        navigateAndSee(action_cnt, action)
+        rgb, depth, sensor_state = navigateAndSee(action)
         print("action: FORWARD")
     elif keystroke == ord(LEFT_KEY):
         action = "turn_left"
-        navigateAndSee(action_cnt, action)
+        rgb, depth, sensor_state = navigateAndSee(action)
         print("action: LEFT")
     elif keystroke == ord(RIGHT_KEY):
         action = "turn_right"
-        navigateAndSee(action_cnt, action)
+        rgb, depth, sensor_state = navigateAndSee(action)
         print("action: RIGHT")
     elif keystroke == ord(FINISH):
         print("action: FINISH")
@@ -174,3 +185,4 @@ while True:
     else:
         print("INVALID KEY")
         continue
+
