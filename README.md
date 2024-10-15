@@ -1,7 +1,5 @@
 # 3d Reconstruction using habitat 
 
-![first_floor_open3d](https://hackmd.io/_uploads/rJxMkMn1yx.png)
-
 ## How to run my program
 
 ### dependency
