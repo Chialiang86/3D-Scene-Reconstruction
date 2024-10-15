@@ -1,5 +1,7 @@
 # 3d Reconstruction using habitat 
 
+<img width="513" alt="first_floor_open3d" src="https://github.com/user-attachments/assets/b2eed1f3-38c5-4e4f-bd4f-c643112833e4">
+
 ## How to run my program
 
 ### dependency
